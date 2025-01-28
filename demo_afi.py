@@ -1,60 +1,67 @@
-# Importation des bibliothèques nécessaires pour Streamlit
 import streamlit as st
-import pandas as pd
+from streamlit_chat import message
+import openai
 
-# --- Étape 1 : Titre et introduction de la démo --- #
-st.title("Démo : Assistant Financier Intelligent (AFI)")
-st.write("""
-Cette démo illustre comment un agent AI peut analyser les données extraites par ABBYY Vantage pour 
-identifier des anomalies et proposer des recommandations.
-""")
+# Title and instructions
+st.title("AI Agent Demo with Document Processing")
+st.write("This app simulates an AI agent integrated with document processing. Upload a document or ask a question to start.")
 
-# --- Étape 2 : Chargement des données extraites --- #
-st.header("1. Importer une facture (données extraites)")
-uploaded_file = st.file_uploader("Importer un fichier JSON ou CSV contenant les données extraites par ABBYY", type=["json", "csv"])
+# Initialize session state
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello! I'm your AI agent. You can upload a document for analysis or ask me a question."}
+    ]
 
-if uploaded_file:
-    # Lecture des données
-    if uploaded_file.name.endswith('.csv'):
-        data = pd.read_csv(uploaded_file)
-    else:
-        data = pd.read_json(uploaded_file)
-    
-    st.write("### Données extraites :")
-    st.dataframe(data)
+# Sidebar for OpenAI API Key
+st.sidebar.header("Configuration")
+api_key = st.sidebar.text_input("Enter your OpenAI API key", type="password")
 
-    # --- Étape 3 : Simuler l'analyse AI --- #
-    st.header("2. Analyse par l'agent AI")
-    anomalies = []
+if not api_key:
+    st.warning("Please enter your OpenAI API key in the sidebar.")
+    st.stop()
 
-    # Détection d'anomalies fictives
-    for index, row in data.iterrows():
-        if "TVA" in data.columns and row["TVA"] != 20.0:
-            anomalies.append(f"Ligne {index + 1}: Taux de TVA incorrect ({row['TVA']}% au lieu de 20%).")
-        if "Montant" in data.columns and row["Montant"] > 5000:
-            anomalies.append(f"Ligne {index + 1}: Dépassement budgétaire détecté (montant de {row['Montant']} €).")
+openai.api_key = api_key
 
-    # Afficher les anomalies détectées
-    if anomalies:
-        st.error("Anomalies détectées :")
-        for anomaly in anomalies:
-            st.write(f"- {anomaly}")
-    else:
-        st.success("Aucune anomalie détectée.")
+# File upload for document processing
+document = st.file_uploader("Upload a document (PDF or text format) for analysis", type=["pdf", "txt"])
 
-    # --- Étape 4 : Recommandations --- #
-    st.header("3. Recommandations")
-    st.write("""
-    En fonction des anomalies détectées, l'agent propose les actions suivantes :
-    """)
+def mock_document_analysis(doc_content):
+    # This simulates ABI Vantage processing
+    if "invoice" in doc_content.lower():
+        return "It looks like this is an invoice document. I detected potential issues with the VAT rate."  
+    return "Document processed successfully with no detected issues."
 
-    # Exemples d'actions proposées
-    actions = ["Valider la facture malgré l'anomalie", 
-               "Renvoyer au fournisseur pour correction", 
-               "Escalader au manager pour décision"]
+# Display the message history
+for msg in st.session_state.messages:
+    message(msg["content"], is_user=(msg["role"] == "user"))
 
-    for action in actions:
-        st.button(action)
+# Handle file processing
+if document:
+    try:
+        content = document.read().decode("utf-8", errors="ignore")
+        analysis_result = mock_document_analysis(content)
+        st.session_state.messages.append({"role": "assistant", "content": analysis_result})
+        message(analysis_result, is_user=False)
+    except Exception as e:
+        st.error(f"Error reading the document: {e}")
 
-else:
-    st.info("Veuillez importer un fichier pour continuer.")
+# Handle user input for chat
+user_input = st.text_input("Ask a question or request further analysis:", key="user_input")
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+
+    # Generate AI response using OpenAI
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=st.session_state.messages
+        )
+        assistant_reply = response["choices"][0]["message"]["content"]
+    except Exception as e:
+        assistant_reply = f"Error connecting to OpenAI: {e}"
+
+    # Append and display the response
+    st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
+    message(assistant_reply, is_user=False)
+
+st.write("\nPro Tip: Try uploading an invoice-like document to see intelligent recommendations.")
