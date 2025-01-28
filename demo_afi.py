@@ -1,67 +1,130 @@
+import pandas as pd
 import streamlit as st
-from streamlit_chat import message
 import openai
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
 
-# Title and instructions
-st.title("AI Agent Demo with Document Processing")
-st.write("This app simulates an AI agent integrated with document processing. Upload a document or ask a question to start.")
+# Title and Instructions
+st.title("AI Agent for Invoice Management")
+st.write("Upload a dataset of invoices, and the AI agent will help with recommendations, anomaly detection, and generate reports.")
 
-# Initialize session state
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I'm your AI agent. You can upload a document for analysis or ask me a question."}
-    ]
-
-# Sidebar for OpenAI API Key
-st.sidebar.header("Configuration")
+# Sidebar API key input
 api_key = st.sidebar.text_input("Enter your OpenAI API key", type="password")
-
 if not api_key:
     st.warning("Please enter your OpenAI API key in the sidebar.")
     st.stop()
 
 openai.api_key = api_key
 
-# File upload for document processing
-document = st.file_uploader("Upload a document (PDF or text format) for analysis", type=["pdf", "txt"])
+# Sample invoice data generation
+def generate_sample_data():
+    data = {
+        "Invoice Number": ["INV-001", "INV-002", "INV-003", "INV-004", "INV-005"],
+        "Supplier Name": ["Supplier A", "Supplier B", "Supplier C", "Supplier D", "Supplier E"],
+        "Invoice Amount": [5000, 12000, 7000, 3000, 9500],
+        "Due Date": [(datetime.now() + timedelta(days=i)).strftime('%Y-%m-%d') for i in [5, 15, 25, 10, 20]],
+        "Payment Terms": ["2/10 Net 30", "Net 15", "Net 30", "2/10 Net 30", "Net 45"]
+    }
+    return pd.DataFrame(data)
 
-def mock_document_analysis(doc_content):
-    # This simulates ABI Vantage processing
-    if "invoice" in doc_content.lower():
-        return "It looks like this is an invoice document. I detected potential issues with the VAT rate."  
-    return "Document processed successfully with no detected issues."
+# Show sample dataset if user requests
+if st.button("Generate Sample Invoice Data"):
+    sample_data = generate_sample_data()
+    st.dataframe(sample_data)
+    sample_data.to_csv("sample_invoices.csv", index=False)
 
-# Display the message history
-for msg in st.session_state.messages:
-    message(msg["content"], is_user=(msg["role"] == "user"))
+# Upload invoice dataset
+uploaded_file = st.file_uploader("Upload your CSV file with invoice data", type="csv")
 
-# Handle file processing
-if document:
-    try:
-        content = document.read().decode("utf-8", errors="ignore")
-        analysis_result = mock_document_analysis(content)
-        st.session_state.messages.append({"role": "assistant", "content": analysis_result})
-        message(analysis_result, is_user=False)
-    except Exception as e:
-        st.error(f"Error reading the document: {e}")
+if uploaded_file:
+    invoices = pd.read_csv(uploaded_file)
+    st.dataframe(invoices)
 
-# Handle user input for chat
-user_input = st.text_input("Ask a question or request further analysis:", key="user_input")
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    # Process and analyze invoice data
+    def generate_recommendations(df):
+        recommendations = []
 
-    # Generate AI response using OpenAI
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=st.session_state.messages
-        )
-        assistant_reply = response["choices"][0]["message"]["content"]
-    except Exception as e:
-        assistant_reply = f"Error connecting to OpenAI: {e}"
+        for _, row in df.iterrows():
+            due_date = datetime.strptime(row["Due Date"], '%Y-%m-%d')
+            days_remaining = (due_date - datetime.now()).days
+            payment_terms = row["Payment Terms"]
 
-    # Append and display the response
-    st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
-    message(assistant_reply, is_user=False)
+            # Proactive recommendation logic
+            if "2/10 Net 30" in payment_terms and days_remaining <= 10:
+                recommendations.append(f"Consider paying {row['Invoice Number']} (Supplier: {row['Supplier Name']}) early for a 2% discount.")
+            elif days_remaining <= 5:
+                recommendations.append(f"Urgent: {row['Invoice Number']} (Supplier: {row['Supplier Name']}) is due in {days_remaining} days.")
+            else:
+                recommendations.append(f"No urgent action required for {row['Invoice Number']}.")
 
-st.write("\nPro Tip: Try uploading an invoice-like document to see intelligent recommendations.")
+        return recommendations
+
+    def detect_anomalies(df):
+        anomalies = []
+        for _, row in df.iterrows():
+            if row["Invoice Amount"] > 10000:  # Example threshold for large invoices
+                anomalies.append(f"Anomaly detected: {row['Invoice Number']} (Amount: {row['Invoice Amount']}) exceeds typical limits.")
+            if not row["Payment Terms"]:
+                anomalies.append(f"Missing payment terms for {row['Invoice Number']}.")
+
+        return anomalies
+
+    # Generate report for invoices
+    def generate_report(df):
+        st.write("### Invoice Report")
+
+        # Summary statistics
+        total_invoices = len(df)
+        total_amount = df["Invoice Amount"].sum()
+        avg_invoice = df["Invoice Amount"].mean()
+
+        st.write(f"- Total number of invoices: {total_invoices}")
+        st.write(f"- Total amount payable: {total_amount}")
+        st.write(f"- Average invoice amount: {avg_invoice:.2f}")
+
+        # Plotting payment terms distribution
+        st.write("#### Payment Terms Distribution")
+        payment_terms_counts = df["Payment Terms"].value_counts()
+        fig, ax = plt.subplots()
+        payment_terms_counts.plot(kind='bar', ax=ax, color='skyblue')
+        plt.title("Payment Terms Distribution")
+        plt.xlabel("Payment Terms")
+        plt.ylabel("Count")
+        st.pyplot(fig)
+
+    # Display use case selection
+    use_case = st.selectbox("Choose an analysis use case", ["Recommendations", "Anomaly Detection", "Generate Report"])
+
+    if use_case == "Recommendations":
+        recommendations = generate_recommendations(invoices)
+        st.write("### AI Recommendations")
+        for rec in recommendations:
+            st.write(f"- {rec}")
+
+    elif use_case == "Anomaly Detection":
+        anomalies = detect_anomalies(invoices)
+        st.write("### Anomaly Detection Results")
+        if anomalies:
+            for anomaly in anomalies:
+                st.write(f"- {anomaly}")
+        else:
+            st.write("No anomalies detected.")
+
+    elif use_case == "Generate Report":
+        generate_report(invoices)
+
+    # Ask the AI agent for advanced financial suggestions
+    user_query = st.text_input("Ask the AI agent a question (e.g., 'What is the total payable amount?')")
+
+    if user_query:
+        prompt = f"Here are the invoices: {invoices.to_dict()}. User question: {user_query}"
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            ai_reply = response["choices"][0]["message"]["content"]
+            st.write("### AI Agent Response")
+            st.write(ai_reply)
+        except Exception as e:
+            st.error(f"Error querying OpenAI: {e}")
