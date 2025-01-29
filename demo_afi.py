@@ -6,10 +6,10 @@ import random
 import pandas as pd
 import base64
 
-# Set up the OpenAI API key (replace with your own API key)
+# Set OpenAI API key
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-# Helper function to create a chatbot icon
+# Helper to add chatbot icon
 def chatbot_icon():
     st.markdown(
         """
@@ -30,7 +30,7 @@ def chatbot_icon():
         unsafe_allow_html=True,
     )
 
-# Invoice simulation data
+# Simulate 50 invoice records
 INVOICES = [
     {
         "Invoice ID": f"INV-{i+1:03}",
@@ -41,60 +41,87 @@ INVOICES = [
     for i in range(50)
 ]
 
-# Convert invoices to DataFrame for easy analysis
+# Convert invoices to DataFrame
 invoices_df = pd.DataFrame(INVOICES)
 
-# Main UI
-def main():
-    st.set_page_config(page_title="AI Invoice Agent", layout="centered")
-    chatbot_icon()
-    
-    st.markdown("# AI-Powered Invoice Insights")
-    st.write("This agent provides recommendations based on invoice data extracted by ABBYY Vantage.")
-    
-    st.markdown("### Ask the AI Agent")
-    user_input = st.text_input("Your question about the invoices")
+# Analyze invoices for payment priority
+def prioritize_invoices(df):
+    urgent = df[df["Due Date"] < (datetime.date.today() + datetime.timedelta(days=10))]
+    high_value = df[df["Amount"] > 3000]
 
-    if user_input:
-        # Simple response generation using OpenAI
+    return urgent, high_value
+
+# Generate intelligent recommendations
+def generate_recommendations():
+    urgent_invoices, high_value_invoices = prioritize_invoices(invoices_df)
+
+    recommendations = []
+    if not urgent_invoices.empty:
+        for _, row in urgent_invoices.iterrows():
+            days_remaining = (row["Due Date"] - datetime.date.today()).days
+            recommendations.append(f"Invoice {row['Invoice ID']} is due in {days_remaining} days. Prioritize payment.")
+
+    if not high_value_invoices.empty:
+        for _, row in high_value_invoices.iterrows():
+            recommendations.append(f"High-value Invoice {row['Invoice ID']} requires review due to an amount of {row['Amount']}.")
+
+    return recommendations
+
+# ChatGPT-powered insights
+def ask_ai_agent(user_input, invoice_summary):
+    prompt = f"Here are 50 invoices summarized:\n{invoice_summary}\nUser question: {user_input}"
+    try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are an AI agent providing financial recommendations."},
-                {"role": "user", "content": user_input}
+                {"role": "system", "content": "You are a financial assistant AI agent analyzing invoices."},
+                {"role": "user", "content": prompt}
             ]
         )
-        response_text = response["choices"][0]["message"]["content"]
-        message(response_text)
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Error querying AI: {e}"
 
-    # Display simulated data
-    st.markdown("---")
+# UI for app
+def main():
+    st.set_page_config(page_title="AI Invoice Agent", layout="centered")
+    chatbot_icon()
+
+    st.markdown("# AI-Powered Invoice Agent 🚀")
+    st.write("This agent provides intelligent financial recommendations and automates workflows based on ABBYY Vantage-extracted data.")
+
+    # Show invoice data
     st.markdown("## Uploaded Invoices")
-    with st.expander("Show uploaded invoices"):
+    with st.expander("View Invoices"):
         st.dataframe(invoices_df)
 
-    st.markdown("### Automated Recommendations")
-    recommendations = []
-    urgent_invoices = invoices_df[invoices_df["Due Date"] < (datetime.date.today() + datetime.timedelta(days=10))]
-
-    for _, row in urgent_invoices.iterrows():
-        due_in_days = (row["Due Date"] - datetime.date.today()).days
-        recommendations.append(f"Invoice {row['Invoice ID']} is due in {due_in_days} days. Payment recommended.")
-    
+    # Proactive recommendations
+    recommendations = generate_recommendations()
+    st.markdown("### Automated AI Recommendations")
     for rec in recommendations:
         st.warning(rec)
 
-    # Automatic payment simulation example
-    if recommendations:
-        if st.button("Start Payment Process for First Urgent Invoice"):
-            st.success(f"Payment process initiated for Invoice {urgent_invoices.iloc[0]['Invoice ID']}.")
+    if recommendations and st.button("Initiate Payment for First Recommendation"):
+        st.success(f"Payment process initiated for Invoice {recommendations[0].split()[1]}.")
 
-    # Generate PDF Report
-    st.markdown("### Generate Report")
-    if st.button("Download PDF Report"):
+    # AI Chat Agent Section
+    st.markdown("### Ask the AI Agent 🧠")
+    user_input = st.text_input("Ask about invoice insights, risks, or payment advice")
+
+    if user_input:
+        invoice_summary = "\n".join([
+            f"Invoice {row['Invoice ID']} with amount {row['Amount']} due on {row['Due Date']} (Condition: {row['Payment Condition']})"
+            for _, row in invoices_df.iterrows()
+        ])
+        ai_response = ask_ai_agent(user_input, invoice_summary)
+        message(ai_response)
+
+    # Generate Report Button
+    st.markdown("### Generate PDF Report")
+    if st.button("Download AI Report"):
         generate_pdf_report(invoices_df, recommendations)
 
-# Function to generate a PDF report
+# PDF report generation
 def generate_pdf_report(df, recommendations):
     import io
     from reportlab.lib.pagesizes import letter
@@ -103,10 +130,10 @@ def generate_pdf_report(df, recommendations):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     c.drawString(100, 750, "AI Invoice Insights Report")
+    c.drawString(100, 730, "---")
+    c.drawString(100, 710, "Recommendations:")
+    y = 690
 
-    # Add recommendations
-    c.drawString(100, 730, "Recommendations:")
-    y = 710
     for rec in recommendations:
         c.drawString(100, y, f"- {rec}")
         y -= 20
@@ -118,7 +145,7 @@ def generate_pdf_report(df, recommendations):
 
     buffer.seek(0)
     b64 = base64.b64encode(buffer.read()).decode()
-    href = f'<a href="data:application/pdf;base64,{b64}" download="Invoice_Insights_Report.pdf">Download Report</a>'
+    href = f'<a href="data:application/pdf;base64,{b64}" download="AI_Invoice_Report.pdf">Download Report</a>'
     st.markdown(href, unsafe_allow_html=True)
 
 if __name__ == "__main__":
