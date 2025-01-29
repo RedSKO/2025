@@ -1,110 +1,115 @@
-import pandas as pd
 import streamlit as st
 import openai
-from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
+from streamlit_chat import message
+import datetime
+import random
+import pandas as pd
+import base64
 
-# Title and Instructions
-st.title("AI Agent for Invoice Management")
-st.write("Upload a dataset of invoices, and the AI agent will help with recommendations, anomaly detection, and reporting.")
+# Set up the OpenAI API key (replace with your own API key)
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-# Sidebar API key input
-api_key = st.sidebar.text_input("Enter your OpenAI API key", type="password")
-if not api_key:
-    st.warning("Please enter your OpenAI API key in the sidebar.")
-    st.stop()
+# Helper function to create a chatbot icon
+def chatbot_icon():
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] .css-1v0mbdj {
+            background-image: url('https://i.imgur.com/7ybfu5A.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-openai.api_key = api_key
-
-# Sample invoice data generation
-def generate_sample_data():
-    data = {
-        "Invoice Number": ["INV-001", "INV-002", "INV-003", "INV-004", "INV-005"],
-        "Supplier Name": ["Supplier A", "Supplier B", "Supplier C", "Supplier D", "Supplier E"],
-        "Invoice Amount": [5000, 12000, 7000, 3000, 9500],
-        "Due Date": [(datetime.now() + timedelta(days=i)).strftime('%Y-%m-%d') for i in [5, 15, 25, 10, 20]],
-        "Payment Terms": ["2/10 Net 30", "Net 15", "Net 30", "2/10 Net 30", "Net 45"]
+# Invoice simulation data
+INVOICES = [
+    {
+        "Invoice ID": f"INV-{i+1:03}",
+        "Amount": round(random.uniform(500, 5000), 2),
+        "Due Date": datetime.date.today() + datetime.timedelta(days=random.randint(1, 60)),
+        "Payment Condition": random.choice(["2% discount if paid within 10 days", "Standard payment", "5% surcharge after 30 days"])
     }
-    return pd.DataFrame(data)
+    for i in range(50)
+]
 
-# Show sample dataset if user requests
-if st.button("Generate Sample Invoice Data"):
-    sample_data = generate_sample_data()
-    st.dataframe(sample_data)
-    sample_data.to_csv("sample_invoices.csv", index=False)
+# Convert invoices to DataFrame for easy analysis
+invoices_df = pd.DataFrame(INVOICES)
 
-# Upload invoice dataset
-uploaded_file = st.file_uploader("Upload your CSV file with invoice data", type="csv")
+# Main UI
+def main():
+    st.set_page_config(page_title="AI Invoice Agent", layout="centered")
+    chatbot_icon()
+    
+    st.title("AI-Powered Invoice Insights")
+    st.write("This agent provides recommendations based on invoice data extracted by ABBYY Vantage.")
 
-if uploaded_file:
-    invoices = pd.read_csv(uploaded_file)
-    st.dataframe(invoices)
+    # Display simulated data
+    with st.expander("Show uploaded invoices"):
+        st.dataframe(invoices_df)
 
-    # Process and analyze invoice data
-    def generate_recommendations(df):
-        recommendations = []
+    st.markdown("### Automated Recommendations")
+    recommendations = []
+    urgent_invoices = invoices_df[invoices_df["Due Date"] < (datetime.date.today() + datetime.timedelta(days=10))]
 
-        for _, row in df.iterrows():
-            due_date = datetime.strptime(row["Due Date"], '%Y-%m-%d')
-            days_remaining = (due_date - datetime.now()).days
-            payment_terms = row["Payment Terms"]
+    for _, row in urgent_invoices.iterrows():
+        due_in_days = (row["Due Date"] - datetime.date.today()).days
+        recommendations.append(f"Invoice {row['Invoice ID']} is due in {due_in_days} days. Payment recommended.")
+    
+    for rec in recommendations:
+        st.warning(rec)
 
-            # Proactive recommendation logic
-            if "2/10 Net 30" in payment_terms and days_remaining <= 10:
-                recommendations.append(f"Consider paying {row['Invoice Number']} (Supplier: {row['Supplier Name']}) early for a 2% discount.")
-            elif days_remaining <= 5:
-                recommendations.append(f"Urgent: {row['Invoice Number']} (Supplier: {row['Supplier Name']}) is due in {days_remaining} days.")
-            else:
-                recommendations.append(f"No urgent action required for {row['Invoice Number']}.")
+    # Chat Interface
+    st.markdown("---")
+    st.subheader("Ask the AI Agent")
+    user_input = st.text_input("Your question about the invoices")
 
-        return recommendations
+    if user_input:
+        # Simple response generation using OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an AI agent providing financial recommendations."},
+                {"role": "user", "content": user_input}
+            ]
+        )
+        response_text = response["choices"][0]["message"]["content"]
+        message(response_text)
 
-    def detect_anomalies(df):
-        anomalies = []
-        for _, row in df.iterrows():
-            if row["Invoice Amount"] > 10000:  # Example threshold for large invoices
-                anomalies.append(f"Anomaly detected: {row['Invoice Number']} (Amount: {row['Invoice Amount']}) exceeds typical limits.")
-            if not row["Payment Terms"]:
-                anomalies.append(f"Missing payment terms for {row['Invoice Number']}.")
+    # Generate PDF Report
+    st.markdown("### Generate Report")
+    if st.button("Download PDF Report"):
+        generate_pdf_report(invoices_df, recommendations)
 
-        return anomalies
+# Function to generate a PDF report
+def generate_pdf_report(df, recommendations):
+    import io
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
 
-    # Generate report for invoices
-    def generate_report(df):
-        st.write("### Invoice Report")
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    c.drawString(100, 750, "AI Invoice Insights Report")
 
-        # Summary statistics
-        total_invoices = len(df)
-        total_amount = df["Invoice Amount"].sum()
-        avg_invoice = df["Invoice Amount"].mean()
+    # Add recommendations
+    c.drawString(100, 730, "Recommendations:")
+    y = 710
+    for rec in recommendations:
+        c.drawString(100, y, f"- {rec}")
+        y -= 20
+        if y < 50:
+            c.showPage()
+            y = 750
 
-        st.write(f"- Total number of invoices: {total_invoices}")
-        st.write(f"- Total amount payable: {total_amount}")
-        st.write(f"- Average invoice amount: {avg_invoice:.2f}")
+    c.save()
 
-        # Plotting payment terms distribution
-        st.write("#### Payment Terms Distribution")
-        payment_terms_counts = df["Payment Terms"].value_counts()
-        fig, ax = plt.subplots()
-        payment_terms_counts.plot(kind='bar', ax=ax, color='skyblue')
-        plt.title("Payment Terms Distribution")
-        plt.xlabel("Payment Terms")
-        plt.ylabel("Count")
-        st.pyplot(fig)
+    buffer.seek(0)
+    b64 = base64.b64encode(buffer.read()).decode()
+    href = f'<a href="data:application/pdf;base64,{b64}" download="Invoice_Insights_Report.pdf">Download Report</a>'
+    st.markdown(href, unsafe_allow_html=True)
 
-    # Display AI chat-like interaction
-    st.write("### AI Agent Chat")
-    user_query = st.chat_input("Ask the AI agent a question (e.g., 'Which invoices are due soon?')")
-
-    if user_query:
-        prompt = f"Here are the invoices: {invoices.to_dict()}. User question: {user_query}"
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}]
-            )
-            ai_reply = response["choices"][0]["message"]["content"]
-            st.write("### AI Agent Response")
-            st.write(ai_reply)
-        except Exception as e:
-            st.error(f"Error querying OpenAI: {e}")
+if __name__ == "__main__":
+    main()
