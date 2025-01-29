@@ -2,3 +2,4 @@ streamlit
 streamlit-chat
 openai==0.27.0
 matplotlib
+reportlab
