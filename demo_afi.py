@@ -93,7 +93,8 @@ if uploaded_file:
         st.pyplot(fig)
 
     # Display AI chat-like interaction
-    user_query = st.text_input("Ask the AI agent a question (e.g., 'Which invoices are due soon?')")
+    st.write("### AI Agent Chat")
+    user_query = st.chat_input("Ask the AI agent a question (e.g., 'Which invoices are due soon?')")
 
     if user_query:
         prompt = f"Here are the invoices: {invoices.to_dict()}. User question: {user_query}"
