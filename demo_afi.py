@@ -14,13 +14,18 @@ def chatbot_icon():
     st.markdown(
         """
         <style>
-        [data-testid="stSidebar"] .css-1v0mbdj {
+        .chat-icon {
+            position: absolute;
+            top: 10px;
+            right: 15px;
             background-image: url('https://i.imgur.com/7ybfu5A.png');
             background-size: contain;
             background-repeat: no-repeat;
-            background-position: center;
+            width: 50px;
+            height: 50px;
         }
         </style>
+        <div class='chat-icon'></div>
         """,
         unsafe_allow_html=True,
     )
@@ -44,10 +49,27 @@ def main():
     st.set_page_config(page_title="AI Invoice Agent", layout="centered")
     chatbot_icon()
     
-    st.title("AI-Powered Invoice Insights")
+    st.markdown("# AI-Powered Invoice Insights")
     st.write("This agent provides recommendations based on invoice data extracted by ABBYY Vantage.")
+    
+    st.markdown("### Ask the AI Agent")
+    user_input = st.text_input("Your question about the invoices")
+
+    if user_input:
+        # Simple response generation using OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an AI agent providing financial recommendations."},
+                {"role": "user", "content": user_input}
+            ]
+        )
+        response_text = response["choices"][0]["message"]["content"]
+        message(response_text)
 
     # Display simulated data
+    st.markdown("---")
+    st.markdown("## Uploaded Invoices")
     with st.expander("Show uploaded invoices"):
         st.dataframe(invoices_df)
 
@@ -62,22 +84,10 @@ def main():
     for rec in recommendations:
         st.warning(rec)
 
-    # Chat Interface
-    st.markdown("---")
-    st.subheader("Ask the AI Agent")
-    user_input = st.text_input("Your question about the invoices")
-
-    if user_input:
-        # Simple response generation using OpenAI
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are an AI agent providing financial recommendations."},
-                {"role": "user", "content": user_input}
-            ]
-        )
-        response_text = response["choices"][0]["message"]["content"]
-        message(response_text)
+    # Automatic payment simulation example
+    if recommendations:
+        if st.button("Start Payment Process for First Urgent Invoice"):
+            st.success(f"Payment process initiated for Invoice {urgent_invoices.iloc[0]['Invoice ID']}.")
 
     # Generate PDF Report
     st.markdown("### Generate Report")
