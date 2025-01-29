@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 # Title and Instructions
 st.title("AI Agent for Invoice Management")
-st.write("Upload a dataset of invoices, and the AI agent will help with recommendations, anomaly detection, and generate reports.")
+st.write("Upload a dataset of invoices, and the AI agent will help with recommendations, anomaly detection, and reporting.")
 
 # Sidebar API key input
 api_key = st.sidebar.text_input("Enter your OpenAI API key", type="password")
@@ -92,29 +92,8 @@ if uploaded_file:
         plt.ylabel("Count")
         st.pyplot(fig)
 
-    # Display use case selection
-    use_case = st.selectbox("Choose an analysis use case", ["Recommendations", "Anomaly Detection", "Generate Report"])
-
-    if use_case == "Recommendations":
-        recommendations = generate_recommendations(invoices)
-        st.write("### AI Recommendations")
-        for rec in recommendations:
-            st.write(f"- {rec}")
-
-    elif use_case == "Anomaly Detection":
-        anomalies = detect_anomalies(invoices)
-        st.write("### Anomaly Detection Results")
-        if anomalies:
-            for anomaly in anomalies:
-                st.write(f"- {anomaly}")
-        else:
-            st.write("No anomalies detected.")
-
-    elif use_case == "Generate Report":
-        generate_report(invoices)
-
-    # Ask the AI agent for advanced financial suggestions
-    user_query = st.text_input("Ask the AI agent a question (e.g., 'What is the total payable amount?')")
+    # Display AI chat-like interaction
+    user_query = st.text_input("Ask the AI agent a question (e.g., 'Which invoices are due soon?')")
 
     if user_query:
         prompt = f"Here are the invoices: {invoices.to_dict()}. User question: {user_query}"
