@@ -136,3 +136,4 @@ def generate_pdf_report(df, recommendations):
 
 if __name__ == "__main__":
     main()
+
