@@ -15,14 +15,14 @@ def chatbot_icon():
         """
         <style>
         .chat-icon {
-            position: absolute;
-            top: 10px;
-            right: 15px;
+            position: fixed;
+            top: 15px;
+            left: 15px;
             background-image: url('https://i.imgur.com/7ybfu5A.png');
-            background-size: contain;
-            background-repeat: no-repeat;
-            width: 50px;
-            height: 50px;
+            background-size: cover;
+            width: 40px;
+            height: 40px;
+            z-index: 999;
         }
         </style>
         <div class='chat-icon'></div>
@@ -41,33 +41,25 @@ INVOICES = [
     for i in range(50)
 ]
 
-# Convert invoices to DataFrame
 invoices_df = pd.DataFrame(INVOICES)
 
 # Analyze invoices for payment priority
 def prioritize_invoices(df):
     urgent = df[df["Due Date"] < (datetime.date.today() + datetime.timedelta(days=10))]
     high_value = df[df["Amount"] > 3000]
-
     return urgent, high_value
 
-# Generate intelligent recommendations
 def generate_recommendations():
     urgent_invoices, high_value_invoices = prioritize_invoices(invoices_df)
-
+    
     recommendations = []
     if not urgent_invoices.empty:
-        for _, row in urgent_invoices.iterrows():
-            days_remaining = (row["Due Date"] - datetime.date.today()).days
-            recommendations.append(f"Invoice {row['Invoice ID']} is due in {days_remaining} days. Prioritize payment.")
-
+        recommendations.append(f"Invoice {urgent_invoices.iloc[0]['Invoice ID']} is due in {(urgent_invoices.iloc[0]['Due Date'] - datetime.date.today()).days} days.")
     if not high_value_invoices.empty:
-        for _, row in high_value_invoices.iterrows():
-            recommendations.append(f"High-value Invoice {row['Invoice ID']} requires review due to an amount of {row['Amount']}.")
+        recommendations.append(f"High-value Invoice {high_value_invoices.iloc[0]['Invoice ID']} requires review for an amount of {high_value_invoices.iloc[0]['Amount']}.")
+    
+    return recommendations, urgent_invoices, high_value_invoices
 
-    return recommendations
-
-# ChatGPT-powered insights
 def ask_ai_agent(user_input, invoice_summary):
     prompt = f"Here are 50 invoices summarized:\n{invoice_summary}\nUser question: {user_input}"
     try:
@@ -82,29 +74,26 @@ def ask_ai_agent(user_input, invoice_summary):
     except Exception as e:
         return f"Error querying AI: {e}"
 
-# UI for app
 def main():
     st.set_page_config(page_title="AI Invoice Agent", layout="centered")
     chatbot_icon()
 
-    st.markdown("# AI-Powered Invoice Agent 🚀")
+    st.markdown("# AI-Powered Invoice Agent 🤖")
     st.write("This agent provides intelligent financial recommendations and automates workflows based on ABBYY Vantage-extracted data.")
 
-    # Show invoice data
     st.markdown("## Uploaded Invoices")
     with st.expander("View Invoices"):
         st.dataframe(invoices_df)
 
-    # Proactive recommendations
-    recommendations = generate_recommendations()
+    recommendations, urgent_invoices, high_value_invoices = generate_recommendations()
+
     st.markdown("### Automated AI Recommendations")
-    for rec in recommendations:
-        st.warning(rec)
+    if recommendations:
+        st.warning(recommendations[0])
+        if st.button("View Full List of Recommendations"):
+            for rec in recommendations:
+                st.info(rec)
 
-    if recommendations and st.button("Initiate Payment for First Recommendation"):
-        st.success(f"Payment process initiated for Invoice {recommendations[0].split()[1]}.")
-
-    # AI Chat Agent Section
     st.markdown("### Ask the AI Agent 🧠")
     user_input = st.text_input("Ask about invoice insights, risks, or payment advice")
 
@@ -116,12 +105,10 @@ def main():
         ai_response = ask_ai_agent(user_input, invoice_summary)
         message(ai_response)
 
-    # Generate Report Button
     st.markdown("### Generate PDF Report")
     if st.button("Download AI Report"):
         generate_pdf_report(invoices_df, recommendations)
 
-# PDF report generation
 def generate_pdf_report(df, recommendations):
     import io
     from reportlab.lib.pagesizes import letter
@@ -142,7 +129,6 @@ def generate_pdf_report(df, recommendations):
             y = 750
 
     c.save()
-
     buffer.seek(0)
     b64 = base64.b64encode(buffer.read()).decode()
     href = f'<a href="data:application/pdf;base64,{b64}" download="AI_Invoice_Report.pdf">Download Report</a>'
