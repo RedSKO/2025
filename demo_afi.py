@@ -31,6 +31,7 @@ def chatbot_icon():
     )
 
 # Simulate 50 invoice records
+random.seed(42)  # Ensure consistent recommendations
 INVOICES = [
     {
         "Invoice ID": f"INV-{i+1:03}",
@@ -43,7 +44,6 @@ INVOICES = [
 
 invoices_df = pd.DataFrame(INVOICES)
 
-# Analyze invoices for payment priority
 def prioritize_invoices(df):
     urgent = df[df["Due Date"] < (datetime.date.today() + datetime.timedelta(days=10))]
     high_value = df[df["Amount"] > 3000]
@@ -51,14 +51,14 @@ def prioritize_invoices(df):
 
 def generate_recommendations():
     urgent_invoices, high_value_invoices = prioritize_invoices(invoices_df)
-    
     recommendations = []
+
     if not urgent_invoices.empty:
         recommendations.append(f"Invoice {urgent_invoices.iloc[0]['Invoice ID']} is due in {(urgent_invoices.iloc[0]['Due Date'] - datetime.date.today()).days} days.")
     if not high_value_invoices.empty:
         recommendations.append(f"High-value Invoice {high_value_invoices.iloc[0]['Invoice ID']} requires review for an amount of {high_value_invoices.iloc[0]['Amount']}.")
-    
-    return recommendations, urgent_invoices, high_value_invoices
+
+    return recommendations
 
 def ask_ai_agent(user_input, invoice_summary):
     prompt = f"Here are 50 invoices summarized:\n{invoice_summary}\nUser question: {user_input}"
@@ -85,15 +85,18 @@ def main():
     with st.expander("View Invoices"):
         st.dataframe(invoices_df)
 
-    recommendations, urgent_invoices, high_value_invoices = generate_recommendations()
-
+    # Recommendations Section
+    recommendations = generate_recommendations()
     st.markdown("### Automated AI Recommendations")
-    if recommendations:
-        st.warning(recommendations[0])
-        if st.button("View Full List of Recommendations"):
-            for rec in recommendations:
-                st.info(rec)
+    for rec in recommendations:
+        st.warning(rec)
 
+    # Payment Initiation
+    if recommendations:
+        if st.button("Initiate Payment for First Recommendation"):
+            st.success(f"Payment process initiated for Invoice {recommendations[0].split()[1]}.")
+
+    # AI Chat Section
     st.markdown("### Ask the AI Agent 🧠")
     user_input = st.text_input("Ask about invoice insights, risks, or payment advice")
 
@@ -105,6 +108,7 @@ def main():
         ai_response = ask_ai_agent(user_input, invoice_summary)
         message(ai_response)
 
+    # Report Generation Section
     st.markdown("### Generate PDF Report")
     if st.button("Download AI Report"):
         generate_pdf_report(invoices_df, recommendations)
@@ -136,4 +140,3 @@ def generate_pdf_report(df, recommendations):
 
 if __name__ == "__main__":
     main()
-
